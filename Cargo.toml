@@ -1,11 +1,12 @@
 [package]
 name = "codegen"
 version = "0.1.0"
-authors = ["Peter Pajchl <peter.pajchl@gmail.com>"]
+authors = ["Peter Pajchl <peter@criteriamx.com>"]
 edition = "2018"
 
 [dependencies]
-structopt = "0.2.14"
+structopt = "0.2.15"
 rand = "0.6.5"
 time = "0.1.42"
-dirs = "1.0.4"
+dirs = "1.0.5"
+crossterm = "0.7.0"

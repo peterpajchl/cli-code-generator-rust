@@ -1,6 +1,7 @@
 extern crate rand;
 extern crate time;
 extern crate dirs;
+extern crate crossterm;
 
 use structopt::StructOpt;
 use rand::{Rng};
@@ -15,6 +16,10 @@ use std::fs::{self, File};
 use std::io::Error;
 use std::path::PathBuf;
 use std::result::Result;
+use crossterm::Crossterm;
+use crossterm::TerminalCursor;
+use crossterm::ClearType;
+use crossterm::{Colored, Color, Colorize, Styler, Attribute};
 
 #[derive(StructOpt)]
 #[derive(Debug)]
@@ -23,31 +28,72 @@ struct Cli {
     number_codes_per_file: u32,
 }
 
-fn delete_dir_contents(src_dir: &PathBuf) -> Result<(), Error> {
+fn main() {
 
-    let dir = match src_dir.read_dir() {
-        Ok(dir)  => dir,
-        Err(e) => return Err(e),
-    };
+    let crossterm = Crossterm::new();
+    //let color = crossterm.color();
+    let cursor = crossterm.cursor();
+    let terminal = crossterm.terminal();
 
-    for entry in dir {
-        
-        let file = match entry {
-            Ok(file)  => file,
-            Err(e) => return Err(e),
-        };
+    terminal.clear(ClearType::All).ok();
 
-        let path = file.path();
+    const CODE_LENGTH: usize = 6;
+    let start_time = PreciseTime::now();
+    let mut codes_list: BTreeSet<String> = BTreeSet::new();
 
-        fs::remove_file(path).expect("failed");
+    let args = Cli::from_args();
+    let mut rng = rand::thread_rng();
+    let mut generated_counter: u32 = 0;
+    let mut duplicate_counter: u32 = 0;
+    let mut number_of_files: u32 = 1;
+
+    println!("Preparing folder if not available");
+    let codes_directory = home_dir().unwrap().join("campaigncodes");
+
+    create_dir_all(&codes_directory).expect("Failed to create directory for codes.");
+    let msg_folder_ok = "Folder for codes already exists or was now created.".green().on(Color::Black);
+    println!("{}", msg_folder_ok);
+    
+    delete_dir_contents(&codes_directory).expect("Failed to empty codes directory");
+    println!("Folder for codes is empty and ready.");
+
+    let mut current_code_file = file_for_codes(&cursor, &codes_directory, number_of_files);
+
+    while generated_counter < args.number_of_codes {
+
+        if generated_counter >= number_of_files * args.number_codes_per_file {
+            number_of_files = number_of_files + 1;
+            current_code_file = file_for_codes(&cursor, &codes_directory, number_of_files);
+        }
+
+        let code = generate_code(&mut rng, CODE_LENGTH);
+        let code_copy = code.clone(); // how to avoid this copy
+
+        if codes_list.insert(code) {
+            writeln!(&mut current_code_file, "{}", code_copy).unwrap();
+            generated_counter = generated_counter + 1;
+        } else {
+            duplicate_counter = duplicate_counter + 1;
+        }
     }
 
-    Ok(())
+    println!("Duplicates skipped {}", duplicate_counter);
+    println!("Generated {} codes into {} files", args.number_of_codes, number_of_files);
+    println!("Operation took {}", start_time.to(PreciseTime::now()));
 }
 
-fn file_for_codes(path: &PathBuf, file_counter: u32) -> File {
 
+fn generate_code(rng: &mut rand::rngs::ThreadRng, code_length: usize) -> String {
+    rng.sample_iter(&Alphanumeric).take(code_length).collect()
+}
+
+fn file_for_codes(cursor: &TerminalCursor, path: &PathBuf, file_counter: u32) -> File {
+
+    cursor.goto(0, 5).expect("failed this");
     println!("Preparing file {}", file_counter);
+
+    // print percentage progress
+
     let file_name = format!("codes-{}.txt", file_counter);
     let file_path = path.join(file_name);
 
@@ -66,56 +112,22 @@ fn file_for_codes(path: &PathBuf, file_counter: u32) -> File {
     f
 }
 
-fn main() {
+fn delete_dir_contents(src_dir: &PathBuf) -> Result<(), Error> {
 
-    const CODE_LENGTH: usize = 6;
-    let start_time = PreciseTime::now();
-    let mut codes_list: BTreeSet<String> = BTreeSet::new();
+    let dir = match src_dir.read_dir() {
+        Ok(dir)  => dir,
+        Err(e) => return Err(e),
+    };
 
-    let args = Cli::from_args();
-    let mut rng = rand::thread_rng();
-    let mut generated_counter: u32 = 0;
-    let mut duplicate_counter: u32 = 0;
-    let mut number_of_files: u32 = 1;
-
-    println!("Preparing folder if not available");
-    let codes_directory = home_dir().unwrap().join("campaigncodes");
-
-    create_dir_all(&codes_directory).expect("Failed to create directory for codes.");
-    println!("Folder for codes already exists or was now created.");
-    
-    delete_dir_contents(&codes_directory).expect("Failed to empty codes directory");
-    println!("Folder for codes is empty and ready.");
-
-    let mut current_code_file = file_for_codes(&codes_directory, number_of_files);
-
-    while generated_counter < args.number_of_codes {
-
-        if generated_counter >= number_of_files * args.number_codes_per_file {
-            number_of_files = number_of_files + 1;
-            current_code_file = file_for_codes(&codes_directory, number_of_files);
-        }
-
-        let code = generate_code(&mut rng, CODE_LENGTH);
-        let code_copy = code.clone(); 
-
-        if codes_list.insert(code) {
-            writeln!(&mut current_code_file, "{}", code_copy).unwrap();
-            generated_counter = generated_counter + 1;
-        } else {
-            duplicate_counter = duplicate_counter + 1;
-        }
+    for entry in dir {
+        let file = match entry {
+            Ok(file)  => file,
+            Err(e) => return Err(e),
+        };
+        fs::remove_file(file.path()).expect("failed");
     }
 
-    println!("Duplicates skipped {}", duplicate_counter);
-    println!("Generated {} codes into {} files", args.number_of_codes, number_of_files);
-    println!("Operation took {}", start_time.to(PreciseTime::now()));
-}
-
-
-fn generate_code(rng: &mut rand::rngs::ThreadRng, code_length: usize) -> String {
-    let code: String = rng.sample_iter(&Alphanumeric).take(code_length).collect();
-    code
+    Ok(())
 }
 
 
