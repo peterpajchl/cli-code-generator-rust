@@ -45,7 +45,7 @@ fn delete_dir_contents(src_dir: &PathBuf) -> Result<(), Error> {
     Ok(())
 }
 
-fn file_for_codes(path: PathBuf, file_counter: u32) -> File {
+fn file_for_codes(path: &PathBuf, file_counter: u32) -> File {
 
     println!("Preparing file {}", file_counter);
     let file_name = format!("codes-{}.txt", file_counter);
@@ -79,22 +79,21 @@ fn main() {
     let mut number_of_files: u32 = 1;
 
     println!("Preparing folder if not available");
-    let mut codes_directory = home_dir().unwrap().join("campaigncodes");
-    //let empty_dir = PathBuf::from(&codes_directory);
+    let codes_directory = home_dir().unwrap().join("campaigncodes");
 
-    create_dir_all(&mut codes_directory).expect("Failed to create directory for codes.");
+    create_dir_all(&codes_directory).expect("Failed to create directory for codes.");
     println!("Folder for codes already exists or was now created.");
     
-    delete_dir_contents(PathBuf::from(&empty_dir)).expect("Failed to empty codes directory");
+    delete_dir_contents(&codes_directory).expect("Failed to empty codes directory");
     println!("Folder for codes is empty and ready.");
 
-    let mut current_code_file = file_for_codes(PathBuf::from(&empty_dir), number_of_files);
+    let mut current_code_file = file_for_codes(&codes_directory, number_of_files);
 
     while generated_counter < args.number_of_codes {
 
         if generated_counter >= number_of_files * args.number_codes_per_file {
             number_of_files = number_of_files + 1;
-            current_code_file = file_for_codes(PathBuf::from(&empty_dir), number_of_files);
+            current_code_file = file_for_codes(&codes_directory, number_of_files);
         }
 
         let code = generate_code(&mut rng, CODE_LENGTH);
